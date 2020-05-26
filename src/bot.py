@@ -41,12 +41,13 @@ BOT_CONFIG = {
     ]
 }
 
+
 def get_intent(text):
     intents = BOT_CONFIG['intents']
 
     for intent, value in intents.items():
         for example in value['examples']:
-            dist = edit_distance(text, example)          
+            dist = edit_distance(text, example)
             difference = dist / len(example)
             similarity = 1 - difference
             if similarity > 0.6:
@@ -66,20 +67,20 @@ def get_failure_phrase():
 def generate_answer(text):
     # NLU
     intent = get_intent(text)
-    
+
     # Make answer
-    
-    # by script    
+
+    # by script
     if intent:
         response = get_response_by_intent(intent)
         return response
-    
+
     # use generative model
     # TODO ...
-    
+
     # use stub
     failure_phrase = get_failure_phrase()
-    return failure_phrase    
+    return failure_phrase
 
 
 while True:

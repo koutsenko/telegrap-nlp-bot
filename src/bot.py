@@ -67,7 +67,7 @@ def get_intent(text):
 
     for intent, value in intents.items():
         for example in value['examples']:
-            dist = edit_distance(text, example)
+            dist = edit_distance(text.lower(), example.lower())
             difference = dist / len(example)
             similarity = 1 - difference
             if similarity > 0.6:

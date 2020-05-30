@@ -1,2 +1,5 @@
 nltk==3.5
 sklearn==0.0
+python-dotenv==0.13.0
+python-telegram-bot==12.7
+PySocks==1.7.1

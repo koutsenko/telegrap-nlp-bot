@@ -1,11 +1,20 @@
-#!/usr/bin/env python
-# coding: utf-8
+#!/usr/bin/env python3
 
+import os
 import random
+from dotenv import load_dotenv
 from nltk.metrics.distance import edit_distance
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.linear_model import LogisticRegression
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 
+load_dotenv()
 
-BOT_CONFIG = {
+PROXY = os.getenv('PROXY')
+TOKEN = os.getenv('TOKEN')
+CLASSIFIER_TRESHOLD = 0.2
+GENERATIVE_TRESHOLD = 0.6
+SCRIPT_DATA = {
     'intents': {
         'hello': {
             'examples': ['Йо', 'Хай', 'Дарова', 'Привет', 'Добрый день', 'Здравствуй', 'Шалом'],
@@ -53,57 +62,134 @@ BOT_CONFIG = {
         },
     },
     'failure_phrases': [
-        'Я не знаю, что ответить',
-        'Не поняла вас',
-        'Простите, не поняла вас',
-        'Я на такое не умею отвечать',
-        'Переформулируйте, пожалуйста'
+        'Извините, я вас не понял',
+        'Простите, вы о чем?',
     ]
 }
 
+# Глобальные переменные
+stats = {
+    'requests': 0,
+    'byscript': 0,
+    'bygenerative': 0,
+    'stub': 0
+}
+GENERATIVE_DIALOGUES = []
+
+# Заполнение GENERATIVE_DIALOGUES
+with open('dialogues.txt') as f:
+    data = f.read()
+dialogues = []
+for dialogue in data.split('\n\n'):
+    replicas = []
+    for replica in dialogue.split('\n')[:2]:
+        replica = replica[2:].lower()
+        replicas.append(replica)
+    if len(replicas) == 2 and len(replicas[0]) > 1 and len(replicas[1]) > 0:
+        dialogues.append(replicas)
+GENERATIVE_DIALOGUES = dialogues[:5000]
+
+# Глобальные переменные и обучение классификатора
+X_text = []
+y = []
+for intent, value in SCRIPT_DATA['intents'].items():
+    for example in value['examples']:
+        X_text.append(example)
+        y.append(intent)
+VECTORIZER = CountVectorizer()
+X = VECTORIZER.fit_transform(X_text)
+CLF = LogisticRegression()
+CLF.fit(X, y)
+
 
 def get_intent(text):
-    intents = BOT_CONFIG['intents']
+    probas = CLF.predict_proba(VECTORIZER.transform([text]))
+    max_proba = max(probas[0])
+    if max_proba >= CLASSIFIER_TRESHOLD:
+        index = list(probas[0]).index(max_proba)
+        return CLF.classes_[index]
 
-    for intent, value in intents.items():
-        for example in value['examples']:
-            dist = edit_distance(text.lower(), example.lower())
-            difference = dist / len(example)
-            similarity = 1 - difference
-            if similarity > 0.6:
-                return intent
+
+def get_answer_by_generative_model(text):
+    text = text.lower()
+
+    for question, answer in GENERATIVE_DIALOGUES:
+        if abs(len(text) - len(question)) / len(question) < 1 - GENERATIVE_TRESHOLD:
+            dist = edit_distance(text, question)
+            l = len(question)
+            similarity = 1 - dist / l
+            if similarity > GENERATIVE_TRESHOLD:
+                return answer
 
 
 def get_response_by_intent(intent):
-    responses = BOT_CONFIG['intents'][intent]['responses']
+    responses = SCRIPT_DATA['intents'][intent]['responses']
     return random.choice(responses)
 
 
 def get_failure_phrase():
-    phrases = BOT_CONFIG['failure_phrases']
+    phrases = SCRIPT_DATA['failure_phrases']
     return random.choice(phrases)
 
 
 def generate_answer(text):
-    # NLU
+    stats['requests'] += 1
+
+    # Make answer by script
     intent = get_intent(text)
-
-    # Make answer
-
-    # by script
     if intent:
+        stats['byscript'] += 1
         response = get_response_by_intent(intent)
         return response
 
-    # use generative model
-    # TODO ...
+    # Or use generative model
+    answer = get_answer_by_generative_model(text)
+    if answer:
+        stats['bygenerative'] += 1
+        return answer
 
-    # use stub
+    # Or use one of failure answers
+    stats['stub'] += 1
     failure_phrase = get_failure_phrase()
     return failure_phrase
 
 
-while True:
-    text = input('Введите вопрос: ')
-    answer = generate_answer(text)
-    print(answer)
+def start(update, context):
+    """Send a message when the command /start is issued."""
+    update.message.reply_text('Hi!')
+
+
+def help(update, context):
+    """Send a message when the command /help is issued."""
+    update.message.reply_text('Help!')
+
+
+def text(update, context):
+    """Ответ уже от движка"""
+    answer = generate_answer(update.message.text)
+    print(update.message.text, '->', answer)
+    print(stats)
+    print()
+    update.message.reply_text(answer)
+
+
+def error(update, context):
+    update.message.reply_text('Я работаю только с текстом')
+
+
+def main():
+    updater = Updater(TOKEN, request_kwargs={
+                      'proxy_url': PROXY}, use_context=True)
+
+    dp = updater.dispatcher
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("help", help))
+    dp.add_handler(MessageHandler(Filters.text, text))
+    dp.add_error_handler(error)
+    print('hello')
+    updater.start_polling()
+    updater.idle()
+
+
+if __name__ == '__main__':
+    main()

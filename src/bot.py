@@ -2,14 +2,15 @@
 
 import os
 import random
-from nltk.metrics.distance import edit_distance
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
+
 import transport_telegram
+import generative
 
 
 CLASSIFIER_TRESHOLD = 0.2
-GENERATIVE_TRESHOLD = 0.3
+
 SCRIPT_DATA = {
     'intents': {
         'hello': {
@@ -70,20 +71,7 @@ stats = {
     'bygenerative': 0,
     'stub': 0
 }
-GENERATIVE_DIALOGUES = []
 
-# Заполнение GENERATIVE_DIALOGUES
-with open('dialogues.txt') as f:
-    data = f.read()
-dialogues = []
-for dialogue in data.split('\n\n'):
-    replicas = []
-    for replica in dialogue.split('\n')[:2]:
-        replica = replica[2:].lower()
-        replicas.append(replica)
-    if len(replicas) == 2 and len(replicas[0]) > 1 and len(replicas[1]) > 0:
-        dialogues.append(replicas)
-GENERATIVE_DIALOGUES = dialogues[:5000]
 
 # Глобальные переменные и обучение классификатора
 X_text = []
@@ -104,17 +92,6 @@ def get_intent(text):
     if max_proba >= CLASSIFIER_TRESHOLD:
         index = list(probas[0]).index(max_proba)
         return CLF.classes_[index]
-
-
-def get_answer_by_generative_model(text):
-    text = text.lower()
-    for question, answer in GENERATIVE_DIALOGUES:
-        if abs(len(text) - len(question)) / len(question) < 1 - GENERATIVE_TRESHOLD:
-            dist = edit_distance(text, question)
-            l = len(question)
-            similarity = 1 - dist / l
-            if similarity > GENERATIVE_TRESHOLD:
-                return answer
 
 
 def get_response_by_intent(intent):
@@ -138,7 +115,7 @@ def generate_answer(text):
         return response
 
     # Or use generative model
-    answer = get_answer_by_generative_model(text)
+    answer = generative.get_answer_by_generative_model(text)
     if answer:
         stats['bygenerative'] += 1
         return answer
@@ -155,6 +132,7 @@ def print_stats():
 
 
 def main():
+    generative.fill_dialogues()
     transport_telegram.run(generate_answer, print_stats)
 
 

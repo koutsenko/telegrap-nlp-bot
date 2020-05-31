@@ -9,7 +9,7 @@ GENERATIVE_TRESHOLD = 0.3
 
 
 def fill_dialogues():
-    with open('dialogues.txt') as f:
+    with open('dialogues.txt', encoding='utf-8') as f:
         data = f.read()
     dialogues = []
     for dialogue in data.split('\n\n'):

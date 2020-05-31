@@ -2,18 +2,14 @@
 
 import os
 import random
-from dotenv import load_dotenv
 from nltk.metrics.distance import edit_distance
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.linear_model import LogisticRegression
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+import transport_telegram
 
-load_dotenv()
 
-PROXY = os.getenv('PROXY')
-TOKEN = os.getenv('TOKEN')
 CLASSIFIER_TRESHOLD = 0.2
-GENERATIVE_TRESHOLD = 0.6
+GENERATIVE_TRESHOLD = 0.3
 SCRIPT_DATA = {
     'intents': {
         'hello': {
@@ -112,7 +108,6 @@ def get_intent(text):
 
 def get_answer_by_generative_model(text):
     text = text.lower()
-
     for question, answer in GENERATIVE_DIALOGUES:
         if abs(len(text) - len(question)) / len(question) < 1 - GENERATIVE_TRESHOLD:
             dist = edit_distance(text, question)
@@ -154,41 +149,13 @@ def generate_answer(text):
     return failure_phrase
 
 
-def start(update, context):
-    """Send a message when the command /start is issued."""
-    update.message.reply_text('Hi!')
-
-
-def help(update, context):
-    """Send a message when the command /help is issued."""
-    update.message.reply_text('Help!')
-
-
-def text(update, context):
-    """Ответ уже от движка"""
-    answer = generate_answer(update.message.text)
-    print(update.message.text, '->', answer)
+def print_stats():
     print(stats)
     print()
-    update.message.reply_text(answer)
-
-
-def error(update, context):
-    update.message.reply_text('Я работаю только с текстом')
 
 
 def main():
-    updater = Updater(TOKEN, request_kwargs={
-                      'proxy_url': PROXY}, use_context=True)
-
-    dp = updater.dispatcher
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help))
-    dp.add_handler(MessageHandler(Filters.text, text))
-    dp.add_error_handler(error)
-    print('hello')
-    updater.start_polling()
-    updater.idle()
+    transport_telegram.run(generate_answer, print_stats)
 
 
 if __name__ == '__main__':
